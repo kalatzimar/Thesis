@@ -1,0 +1,305 @@
+################################################################################
+# Purpose: THESIS
+#         
+# Author : Kalatzi Marilena
+# Date   : August 2024
+################################################################################
+
+################################ LOAD PACKAGES #################################
+library(survextrap)
+library(readODS)
+library(survival)
+library(flexsurv)
+library(ggplot2)
+library(survminer)
+library(RColorBrewer)
+library(viridis)
+library(dplyr)
+library(muhaz)
+library(tidyverse)
+library(kableExtra)
+library(magrittr)
+################################################################################
+
+################################ LOAD DATA #####################################
+# Define a function to read specific rows
+LoadData = function(file, sheet, start_row, end_row) {
+  # Read the entire sheet
+  data = read_ods(file, sheet = sheet)
+  # Extract the specific rows
+  specific_rows = data[start_row:end_row, ]
+  return(specific_rows)
+}
+
+FilePath = "C:/Users/kalat/OneDrive/Desktop/Thesis/Publications on 1L NSCLC/Dummy survival ML-NMR study data.ods"
+# FilePath = "Dummy survival ML-NMR study data.ods"
+
+AtezoDf = LoadData(FilePath, sheet = 3, start_row = 3771, end_row = 4324)
+
+AtezoDf = subset(AtezoDf, select = - Data_type)
+head(AtezoDf)
+
+AtezoDf = data.frame(AtezoDf)
+AtezoDf$Arm = factor(AtezoDf$Arm, labels = c("Chemotherapy", "Atezolizumab"))
+
+ChemoArm = AtezoDf[AtezoDf$Arm == "Chemotherapy",]
+AtezoArm = AtezoDf[AtezoDf$Arm == "Atezolizumab",]
+
+# ---- DEFINE M-SPLINE AND PRIORS ----
+
+# ---- DEFAULT M-SPLINE SPECIFICATION
+# Set up the default spline to allow changes in the hazard for up to 20 years.
+# After that, we don't expect to see other changes, or we are not interested.
+
+mspline = mspline_spec(Surv(Time, Event) ~ 1, data=AtezoDf, df=7, add_knots=20)
+
+# ---- HAZARD SCALE PARAMETER (η) PRIOR
+# for prior η to be specified, we think about the median age (64) of the trial
+# "and we want to imply a prior mean survival of 25 years after diagnosis
+# but with variance chosen so that mean survival could be as high as 100 years 
+# after diagnosis"
+
+prior_hscale = p_meansurv(median=25, upper=100, mspline=mspline)
+
+# function prior_haz_const() translates a normal prior for η to the corresponding
+# beliefs about survival. Using this function we can check that the lower limit 
+# set is sensible for our data.
+
+prior_haz_const(mspline, prior_hscale = prior_hscale)
+
+# ---- HAZARD VARIABILITY PARAMETER (σ) PRIOR
+# "prior for σ is chosen so that the highest hazard values over the 20 year horizon
+# (i.e 90% quantile for some reason?) are expected to be about ρ = 2 times the 
+# lowest values (10% quantile), with a vague 95% credible interval between 1 and 16"
+# "prior_haz_sd() uses simulation to estimate the beliefs implied by a particular
+# Gamma prior for σ, jointly with the prior specified for hazard scale. 
+# Gamma(2,5) is chosen throug trial and error to achieve a value around 2 in the 
+# quantity returned (hr represents the wanted result for ρ)"
+
+set.seed(178)
+prior_hsd = p_gamma(2, 5)
+prior_haz_sd(mspline = mspline,
+             prior_hsd = prior_hsd,
+             prior_hscale = prior_hscale)
+
+# ---- HAZARD RATIO FOR TREATMENT EFFECT
+
+prior_loghr = p_hr(median=1, upper=50)
+prior_hr(prior_loghr)
+
+# ---- HAZARD RATIO VARIABILITY PARAMETER τ FOR NON-PROPORTIONAL HAZARDS MODEL
+
+# governs the size of departure from proportional hazards, 
+# i.e. the variability in the hazard ratio over time
+
+set.seed(1)
+prior_hrsd = p_gamma(2, 3)
+prior_hr_sd(mspline = mspline,                              
+            prior_hsd = prior_hsd,
+            prior_loghr = prior_loghr,
+            prior_hscale = prior_hscale,
+            prior_hrsd = prior_hrsd,
+            formula = ~ Arm,
+            nonprop = ~ Arm,
+            newdata = data.frame(Arm=1), 
+            newdata0 = data.frame(Arm=0))
+
+# ---- MODELING -----
+# ---- Single Treatment Group ----
+
+# options(mc.cores = 2)
+# mod_con = survextrap(Surv(Time/12, Event) ~ 1, data=ChemoArm, mspline=mspline,
+#                       prior_hscale=prior_hscale, prior_hsd = prior_hsd)
+# 
+# # mod_con5 = survextrap(Surv(Time/12, Event) ~ 1, data=ChemoArm, 
+# #                        prior_hscale=prior_hscale, prior_hsd = prior_hsd)
+# 
+# surv_const = survival(mod_con5, tmax=20) %>% mutate(model="Constant hazard")
+# surv_ipd = survival(mod_con, tmax=20) %>% mutate(model="Varying hazard")
+# surv_single = rbind(surv_const, surv_ipd)
+# haz_const = hazard(mod_con5, tmax=20) %>% mutate(model="Constant hazard")
+# haz_ipd = hazard(mod_con, tmax=20) %>% mutate(model="Varying hazard")
+# haz_single = rbind(haz_const, haz_ipd)
+# 
+# ps = ggplot(surv_single, aes(x=t, y=median, 
+#                               group=model, col=model, fill=model)) + 
+#   geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.2, colour=NA) +
+#   geom_line(lwd=1.3) + 
+#   geom_step(data=mod_con$km, aes(x=time, y=surv), lwd=1.3,
+#             inherit.aes = FALSE) +
+#   theme_minimal() + 
+#   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+#   xlab("Years after diagnosis") + 
+#   ylab("Survival probability") +
+#   scale_color_viridis(discrete=TRUE) + 
+#   scale_fill_viridis(discrete=TRUE) + 
+#   theme(legend.position = c(0.6, 0.8)) + labs(col=NULL, fill=NULL) +
+#   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+#   geom_vline(xintercept = max(ChemoArm$Time/12)) +
+#   geom_vline(xintercept = mod_con5$mspline$iknots, col="gray80", lty=2)
+# 
+# ph = ggplot(haz_single, aes(x=t, y=median, 
+#                              group=model, col=model, fill=model)) + 
+#   geom_ribbon(aes(ymin=lower, ymax=upper), alpha=0.2, colour=NA) +
+#   geom_line(lwd=1.3) + 
+#   theme_minimal() + xlab("Years after diagnosis") + ylab("Hazard") +
+#   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+#   scale_color_viridis(discrete=TRUE) + 
+#   scale_fill_viridis(discrete=TRUE) + 
+#   geom_vline(xintercept = max(ChemoArm$Time/12)) +
+#   geom_vline(xintercept = mod_con5$mspline$iknots, col="gray80", lty=2) + 
+#   theme(legend.position = "none")
+# 
+# grid::grid.newpage()
+# grid::grid.draw(cbind(ggplotGrob(ps), 
+#                       ggplotGrob(ph)))
+
+# ---- DETERMINING THE OPTIMAL NUMBER OF KNOTS
+options(mc.cores = 2)
+chains = 4; iter = 2000
+dfs = 5:12
+rescomp = as.data.frame(matrix(nrow=length(dfs), ncol=7))
+for (i in seq_along(dfs)){
+  msp = mspline_spec(Surv(Time, Event) ~ 1, data=ChemoArm, df=dfs[i])
+  mod = survextrap(Surv(Time/12, Event) ~ 1, data=ChemoArm, mspline=msp,
+                    prior_hscale=prior_hscale, prior_hsd = prior_hsd)
+  rescompi = cbind(list(df = dfs[i]), 
+                    list(looic = mod$loo$estimates["looic","Estimate"]),
+                    rmst(mod,t=5))
+  rescomp[i,] = rescompi
+}
+names(rescomp) = names(rescompi)
+rescomp %>% 
+  mutate(looic = round(looic, 1), 
+         rmf = sprintf("%s (%s, %s)", round(median,2), 
+                       round(`lower`, 2), round(`upper`, 2))) %>%
+  select(df, looic, rmf) %>%
+  knitr::kable(col.names = c("df", "LOOIC", "Restricted mean survival (5 years)"))
+
+
+# ---- Compare different models
+
+
+# ---- Proportional Hazards model
+chains = 4
+iter = 2000
+TreatPh = survextrap(Surv(Time, Event) ~ Arm, data=AtezoDf, 
+                     mspline=mspline, 
+                     chains=chains, iter=iter,
+                     prior_hscale=prior_hscale, prior_hsd = prior_hsd,
+                     prior_loghr=prior_loghr)
+
+# ---- Non-proportional hazards model
+
+TreatNonPh = survextrap(Surv(Time, Event) ~ Arm, data=AtezoDf, 
+                     mspline=mspline, 
+                     chains=chains, iter=iter, 
+                     nonprop = T, #non-proportionality
+                     prior_hscale=prior_hscale, prior_hsd = prior_hsd,
+                     prior_loghr=prior_loghr)
+
+# ---- Fit arms separately 
+
+ChemoMod = survextrap(Surv(Time, Event) ~ 1, data=ChemoArm, mspline=mspline,
+                                   prior_hscale=prior_hscale, prior_hsd = prior_hsd)
+
+AtezoMod = survextrap(Surv(Time, Event) ~ 1, data=AtezoArm, mspline=mspline, 
+                      chains=chains, iter=iter,
+                      prior_hscale=prior_hscale, prior_hsd = prior_hsd)
+
+# ---- VISUALIZATION
+years = 20
+times = years*12
+SurvPh = survival(TreatPh, tmax=times) %>% mutate(Model="Proportional hazards")
+
+SurvNonPh = survival(TreatNonPh, tmax=times) %>% mutate(Model="Non-proportional hazards")
+
+SurvChemo = survival(ChemoMod, tmax=times) %>% 
+  mutate(Model="Separate fits", Arm="Chemotherapy") %>% relocate(Arm)
+
+SurvAtezo = survival(AtezoMod, tmax=times) %>% 
+  mutate(Model="Separate fits", Arm="Atezolizumab") %>% relocate(Arm)
+
+SurvModels = rbind(SurvPh, SurvNonPh, SurvChemo, SurvAtezo)
+
+ggplot(SurvModels, aes(x=t, y=median, col=Model, lty=Arm)) + 
+  geom_step(data=TreatPh$km, aes(x=time, y=surv, lty=Arm), lwd=1.3,
+            inherit.aes = FALSE) +
+  geom_line(lwd=1.1) + 
+  labs(lty="Treatment", col=NULL) +
+  ggtitle("Model Comparison without external data")+
+  theme_minimal() +
+  theme(legend.position = c(0.6, 0.8)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  scale_x_continuous(labels = function(x) round(x / 12, 0)) + 
+  xlab("Years after diagnosis") + 
+  ylab("Survival probability") +
+  scale_color_viridis(discrete=TRUE) + 
+  geom_vline(xintercept = max(ChemoArm$Time))
+
+# ---- Model Summaries
+
+ModelComp <- function(mod){
+  rm <- rmst(mod, niter=1000, newdata=data.frame(Arm="Chemotherapy"), t=c(36,120,240)) %>% 
+    rename(rm_med="median", rm_lower="lower", rm_upper="upper") %>% 
+    select(t, rm_med, rm_lower, rm_upper)
+  rm2 <- rmst(mod, niter=1000, newdata=data.frame(Arm="Atezolizumab"), t=c(36,120,240)) %>% 
+    rename(rm_med2="median", rm_lower2="lower", rm_upper2="upper") %>% 
+    select(rm_med2, rm_lower2, rm_upper2)
+  cbind(name=deparse(substitute(mod)), rm/12, rm2/12, 
+        list(looic = mod$loo$estimates["looic","Estimate"]))
+}
+
+RmChemo <- rmst(ChemoMod,t = c(36,120,240)) %>%
+  rename(rm_med ="median", rm_lower ="lower", rm_upper ="upper") %>% 
+  select(t, rm_med, rm_lower, rm_upper)
+
+RmChemo = round(RmChemo/12,2)
+
+RmAtezo <- rmst(AtezoMod, t=c(36,120,240)) %>%
+  rename(rm_med2="median", rm_lower2="lower", rm_upper2="upper") %>% 
+  select(rm_med2, rm_lower2, rm_upper2)
+
+RmAtezo = round(RmAtezo/12,2)
+# irmst_sep <- rmst(AtezoMod, t=c(36,120), sample=TRUE) - rmst(ChemoMod, t=c(36,120), sample=TRUE) 
+# 
+# irmst_sep <- irmst_sep %>%
+#   posterior::summarise_draws(median,
+#                              ~quantile(.x, probs=c(0.025, 0.975))) %>%
+#   rename(t=variable, ir_med="median",ir_lower="2.5%", ir_upper="97.5%") %>% 
+#   select(ir_med, ir_lower, ir_upper)
+
+SepArmLooic <- ChemoMod$loo$estimates["looic","Estimate"] +
+  AtezoMod$loo$estimates["looic","Estimate"]
+SepArmComp <- cbind(list(name="mod_sep"), RmChemo, RmAtezo, list(looic=SepArmLooic))
+
+TreatComp <- rbind(ModelComp(TreatPh), ModelComp(TreatNonPh), SepArmComp)
+TreatCompf <- TreatComp %>%
+  arrange(t) %>%
+  mutate(rm = sprintf("%s (%s,%s)", round(rm_med,2),
+                      round(rm_lower,2), round(rm_upper,2)),
+         rm2 = sprintf("%s (%s,%s)", round(rm_med2,2),
+                      round(rm_lower2,2), round(rm_upper2,2)),
+         looic = round(looic),
+         model = forcats::fct_recode(name, 
+                                     "(a) Proportional hazards"="TreatPh",
+                                     "(b) Non-proportional hazards"="TreatNonPh",
+                                     "(c) Separate arms"="mod_sep"
+         )) %>%
+  select(model, t, rm, rm2, looic) %>%
+  tibble::remove_rownames()
+?rmst
+knitr::kable(TreatCompf, col.names=c("Model","Time horizon (years)",
+                                   "RMST Chemotherapy (CI)",
+                                   "RMST Atezolizumab (CI)",
+                                   "LOOIC"))%>% 
+  kable_styling(bootstrap_options = "striped")
+
+
+kable(TreatCompf, 
+      align = "c", 
+      col.names = c("Model", "Time horizon (years)", "RMS Chemotherapy (CI)", "RMR Atezolizumab (CI)", "LOOIC"),
+      caption = "RMST for the 3 fitted models, in 3 different timepoints") %>%
+  kable_styling(bootstrap_options = "striped") %>%
+  row_spec(3, extra_css = "border-bottom: 1px solid blue;") %>%
+  row_spec(6, extra_css = "border-bottom: 1px solid blue;")
