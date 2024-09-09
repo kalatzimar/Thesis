@@ -22,6 +22,7 @@ library(muhaz)
 library(tidyverse)
 library(kableExtra)
 library(magrittr)
+library(knitr)
 ################################################################################
 
 ################################ LOAD DATA #####################################
@@ -98,7 +99,7 @@ cox.zph(CoxModel)
 CoxModelSchoenfeld = ggcoxzph(cox.zph(CoxModel))
 CoxModelSchoenfeld
 
- # do not reject proportionality test
+# do not reject proportionality test
 
 # ---- Log Cumulative Hazard Plots
 
@@ -538,34 +539,60 @@ legend("topright",
        cex    = 1,  
        bty    = "n")
 
-################################# Chat GPT #####################################
 
-mean_survival_time <- function(times, survival_probs) {
-  sum(diff(times) * (head(survival_probs, -1) + tail(survival_probs, -1)) / 2)
-}
+# ---- Survival probabilities for 1, 5 and 10 years
+# Time points of interest in months (since your models use months)
 
-# Mean survival times for each model
-mean_exp <- mean_survival_time(ExtrapChemoExp$time, ExtrapChemoExp$est)
-mean_weib <- mean_survival_time(ExtrapChemoWeib$time, ExtrapChemoWeib$est)
-mean_gomp <- mean_survival_time(ExtrapChemoGomp$time, ExtrapChemoGomp$est)
-mean_logis <- mean_survival_time(ExtrapChemoLogis$time, ExtrapChemoLogis$est)
-mean_norm <- mean_survival_time(ExtrapChemoNorm$time, ExtrapChemoNorm$est)
-mean_gen <- mean_survival_time(ExtrapChemoGen$time, ExtrapChemoGen$est)
-mean_spline1 <- mean_survival_time(ExtrapChemoSpline1$time, ExtrapChemoSpline1$est)
-mean_spline2 <- mean_survival_time(ExtrapChemoSpline2$time, ExtrapChemoSpline2$est)
-mean_spline3 <- mean_survival_time(ExtrapChemoSpline3$time, ExtrapChemoSpline3$est)
+time_points <- c(12, 60, 120) 
 
+SurvExp <- summary(ChemoExp, t = time_points)[[1]]$est * 100
+SurvWeib <- summary(ChemoWeib, t = time_points)[[1]]$est * 100
+SurvGomp <- summary(ChemoGomp, t = time_points)[[1]]$est * 100
+SurvLogis <- summary(ChemoLogis, t = time_points)[[1]]$est * 100
+SurvNorm <- summary(ChemoNorm, t = time_points)[[1]]$est * 100
+SurvGen <- summary(ChemoGen, t = time_points)[[1]]$est * 100
 
-
-mean_spline <- mean_survival_time(ExtrapSpline$time, ExtrapSpline$est)
-
-mean_survival_times <- data.frame(
-  Model = c("Exponential", "Weibull", "Gompertz", "Log-logistic", "Log-normal", "Generalized Gamma", "Spline 1 knot", "Spline 2 knots", "Spline 3 knots"),
-  Mean_Survival_Time = c(mean_exp, mean_weib, mean_gomp, mean_logis, mean_norm, mean_gen, mean_spline1, mean_spline2, mean_spline3)
+# Combine results into a data frame
+ChemoParamSurv <- data.frame(
+  Distribution = c("Exponential", "Weibull", "Gompertz", "Log-Logistic", "Log-Normal", "Generalized Gamma"),
+  `1-Year Survival Probability (%)` = c(SurvExp[1], SurvWeib[1], SurvGomp[1], SurvLogis[1], SurvNorm[1], SurvGen[1]),
+  `5-Year Survival Probability (%)` = c(SurvExp[2], SurvWeib[2], SurvGomp[2], SurvLogis[2], SurvNorm[2], SurvGen[2]),
+  `10-Year Survival Probability (%)` = c(SurvExp[3], SurvWeib[3], SurvGomp[3], SurvLogis[3], SurvNorm[3], SurvGen[3])
 )
 
-mean_survival_times
+kable(ChemoParamSurv, 
+      col.names = c("Distribution", "1-Year Survival Probability (%)", "5-Year Survival Probability (%)", "10-Year Survival Probability (%)"),
+      caption = "Predicted Survival Probabilities for Different Parametric Distributions",
+      align = "c") %>% 
+  kable_styling(bootstrap_options = "striped")
 
+# ---- Spline Survival Probabilities
+
+SurvChemoSpline1 <- summary(ChemoSpline1, t = time_points)[[1]]$est * 100
+SurvChemoSpline2 <- summary(ChemoSpline2, t = time_points)[[1]]$est * 100
+SurvChemoSpline3 <- summary(ChemoSpline3, t = time_points)[[1]]$est * 100
+SurvChemoSplineDef <- summary(ChemoSplineDef, t = time_points)[[1]]$est * 100
+SurvChemoSplineDef2 <- summary(ChemoSplineDef2, t = time_points)[[1]]$est * 100
+SurvChemoSplineDef3 <- summary(ChemoSplineDef3, t = time_points)[[1]]$est * 100
+
+# ---- Parametric and Spline models Survival Probabilities
+
+# Spline Model Results
+ChemoSplineSurv <- data.frame(
+  Distribution = c("Spline 1", "Spline 2", "Spline 3", "Spline Def (log(19))", "Spline Def (log(19,29))", "Spline Def (log(11,19,29))"),
+  `1-Year Survival Probability (%)` = c(SurvChemoSpline1[1], SurvChemoSpline2[1], SurvChemoSpline3[1], SurvChemoSplineDef[1], SurvChemoSplineDef2[1], SurvChemoSplineDef3[1]),
+  `5-Year Survival Probability (%)` = c(SurvChemoSpline1[2], SurvChemoSpline2[2], SurvChemoSpline3[2], SurvChemoSplineDef[2], SurvChemoSplineDef2[2], SurvChemoSplineDef3[2]),
+  `10-Year Survival Probability (%)` = c(SurvChemoSpline1[3], SurvChemoSpline2[3], SurvChemoSpline3[3], SurvChemoSplineDef[3], SurvChemoSplineDef2[3], SurvChemoSplineDef3[3])
+)
+
+# Combine Parametric and Spline Results
+ChemoCombSurv <- rbind(ChemoParamSurv, ChemoSplineSurv)
+
+kable(ChemoCombSurv, 
+      col.names = c("Distribution", "1-Year Survival Probability (%)", "5-Year Survival Probability (%)", "10-Year Survival Probability (%)"),
+      caption = "Predicted Survival Probabilities for Chemotherapy Arm (Parametric and Spline Models)",
+      align = "c") %>% 
+  kable_styling(bootstrap_options = "striped")
 
 # ---- Atezolizumab Arm ----
 
@@ -970,13 +997,13 @@ MeansAtGen    = round(summary(AtezoGen, type='survival', t=SummaryTimes)[[1]][, 
 MeansAtSpline = round(summary(AtezoSplineDef, type='survival', t=SummaryTimes)[[1]][, 2], 3)
 
 AtezoMeansDF = data.frame(Year              = years, 
-                          Exponential       = MeansAtExp,
-                          Weibull           = MeansAtWeib,
-                          Gompertz          = MeansAtGomp,
-                          Logistic          = MeansAtLogis,
-                          Normal            = MeansAtNorm,
-                          GenGamma          = MeansAtGen,
-                          `Spline month 31` = MeansAtSpline
+                          Exponential       = 100*MeansAtExp,
+                          Weibull           = 100*MeansAtWeib,
+                          Gompertz          = 100*MeansAtGomp,
+                          Logistic          = 100*MeansAtLogis,
+                          Normal            = 100*MeansAtNorm,
+                          GenGamma          = 100*MeansAtGen,
+                          `Spline month 31` = 100*MeansAtSpline
                           )
 
 kable(AtezoMeansDF, col.names = c("Year",DistributionNames, "Spline w/ knot in 31"), align = "c") %>% 
@@ -991,23 +1018,58 @@ round(summary(AtezoNorm, type='median')[[1]]['est'], 1)
 round(summary(AtezoGen, type='median')[[1]]['est'], 1)
 round(summary(AtezoSplineDef, type='median')[[1]]['est'], 1)
 
-############# CHAT ##############
-# Mean survival times for each model
-mean_exp <- mean_survival_time(ExtrapAtezoExp$time, ExtrapAtezoExp$est)
-mean_weib <- mean_survival_time(ExtrapAtezoWeib$time, ExtrapAtezoWeib$est)
-mean_gomp <- mean_survival_time(ExtrapAtezoGomp$time, ExtrapAtezoGomp$est)
-mean_logis <- mean_survival_time(ExtrapAtezoLogis$time, ExtrapAtezoLogis$est)
-mean_norm <- mean_survival_time(ExtrapAtezoNorm$time, ExtrapAtezoNorm$est)
-mean_gen <- mean_survival_time(ExtrapAtezoGen$time, ExtrapAtezoGen$est)
-mean_spline1 <- mean_survival_time(ExtrapAtezoSpline1$time, ExtrapAtezoSpline1$est)
-mean_spline2 <- mean_survival_time(ExtrapAtezoSpline2$time, ExtrapAtezoSpline2$est)
-mean_spline3 <- mean_survival_time(ExtrapAtezoSpline3$time, ExtrapAtezoSpline3$est)
+# ---- Survival Probabilities
 
+SurvAtezoExp <- summary(AtezoExp, t = time_points)[[1]]$est * 100
+SurvAtezoWeib <- summary(AtezoWeib, t = time_points)[[1]]$est * 100
+SurvAtezoGomp <- summary(AtezoGomp, t = time_points)[[1]]$est * 100
+SurvAtezoLogis <- summary(AtezoLogis, t = time_points)[[1]]$est * 100
+SurvAtezoNorm <- summary(AtezoNorm, t = time_points)[[1]]$est * 100
+SurvAtezoGen <- summary(AtezoGen, t = time_points)[[1]]$est * 100
 
-mean_survival_times <- data.frame(
-  Model = c("Exponential", "Weibull", "Gompertz", "Log-logistic", "Log-normal", "Generalized Gamma", "Spline 1 knot", "Spline 2 knots", "Spline 3 knots"),
-  Mean_Survival_Time = c(mean_exp, mean_weib, mean_gomp, mean_logis, mean_norm, mean_gen, mean_spline1, mean_spline2, mean_spline3)
+# Combine results into a data frame
+AtezoParamSurv <- data.frame(
+  Distribution = c("Exponential", "Weibull", "Gompertz", "Log-Logistic", "Log-Normal", "Generalized Gamma"),
+  `1-Year Survival Probability (%)` = c(SurvAtezoExp[1], SurvAtezoWeib[1], SurvAtezoGomp[1], SurvAtezoLogis[1], SurvAtezoNorm[1], SurvAtezoGen[1]),
+  `5-Year Survival Probability (%)` = c(SurvAtezoExp[2], SurvAtezoWeib[2], SurvAtezoGomp[2], SurvAtezoLogis[2], SurvAtezoNorm[2], SurvAtezoGen[2]),
+  `10-Year Survival Probability (%)` = c(SurvAtezoExp[3], SurvAtezoWeib[3], SurvAtezoGomp[3], SurvAtezoLogis[3], SurvAtezoNorm[3], SurvAtezoGen[3])
 )
-mean_survival_times
 
+kable(AtezoParamSurv, 
+      col.names = c("Distribution", "1-Year Survival Probability (%)", "5-Year Survival Probability (%)", "10-Year Survival Probability (%)"),
+      caption = "Predicted Survival Probabilities for Atezo Arm for Different Parametric Distributions",
+      align = "c") %>% 
+  kable_styling(bootstrap_options = "striped")
+
+# Spline models
+
+SurvAtezoSpline1 <- summary(AtezoSpline1, t = time_points)[[1]]$est * 100
+SurvAtezoSpline2 <- summary(AtezoSpline2, t = time_points)[[1]]$est * 100
+SurvAtezoSpline3 <- summary(AtezoSpline3, t = time_points)[[1]]$est * 100
+SurvAtezoSplineDef <- summary(AtezoSplineDef, t = time_points)[[1]]$est * 100
+SurvAtezoSplineDef2 <- summary(AtezoSplineDef2, t = time_points)[[1]]$est * 100
+SurvAtezoSplineDef3 <- summary(AtezoSplineDef3, t = time_points)[[1]]$est * 100
+
+# Combine results into a data frame for splines
+AtezoSplineSurv <- data.frame(
+  Distribution = c("Spline 1", "Spline 2", "Spline 3", "Spline Def (log(31))", "Spline Def (log(15,31))", "Spline Def (log(1,15,31))"),
+  `1-Year Survival Probability (%)` = c(SurvAtezoSpline1[1], SurvAtezoSpline2[1], SurvAtezoSpline3[1], SurvAtezoSplineDef[1], SurvAtezoSplineDef2[1], SurvAtezoSplineDef3[1]),
+  `5-Year Survival Probability (%)` = c(SurvAtezoSpline1[2], SurvAtezoSpline2[2], SurvAtezoSpline3[2], SurvAtezoSplineDef[2], SurvAtezoSplineDef2[2], SurvAtezoSplineDef3[2]),
+  `10-Year Survival Probability (%)` = c(SurvAtezoSpline1[3], SurvAtezoSpline2[3], SurvAtezoSpline3[3], SurvAtezoSplineDef[3], SurvAtezoSplineDef2[3], SurvAtezoSplineDef3[3])
+)
+
+kable(AtezoSplineSurv, 
+      col.names = c("Spline Model", "1-Year Survival Probability (%)", "5-Year Survival Probability (%)", "10-Year Survival Probability (%)"),
+      caption = "Predicted Survival Probabilities for Atezo Arm Spline Models",
+      align = "c") %>% 
+  kable_styling(bootstrap_options = "striped")
+
+# Combine both parametric and spline results into one data frame
+AtezoCombSurv <- rbind(AtezoParamSurv, AtezoSplineSurv)
+
+kable(AtezoCombSurv, 
+      col.names = c("Model/Distribution", "1-Year Survival Probability (%)", "5-Year Survival Probability (%)", "10-Year Survival Probability (%)"),
+      caption = "Predicted Survival Probabilities for Atezo Arm (Parametric and Spline Models)",
+      align = "c") %>% 
+  kable_styling(bootstrap_options = "striped")
 

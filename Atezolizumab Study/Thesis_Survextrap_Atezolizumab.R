@@ -303,3 +303,55 @@ kable(TreatCompf,
   kable_styling(bootstrap_options = "striped") %>%
   row_spec(3, extra_css = "border-bottom: 1px solid blue;") %>%
   row_spec(6, extra_css = "border-bottom: 1px solid blue;")
+
+?survival
+
+# ---- Survival Probabilities
+# Define time points for 1-year, 5-year, and 10-year survival probabilities
+comparison_times <- c(12, 60, 120)  # Use comparison_times instead of times
+
+# Filter for these time points and label models
+SurvPh_1_5_10 <- SurvPh %>%
+  filter(t %in% comparison_times) %>%
+  select(t, median) %>%
+  mutate(Model="Proportional hazards")
+
+SurvNonPh_1_5_10 <- SurvNonPh %>%
+  filter(t %in% comparison_times) %>%
+  select(t, median) %>%
+  mutate(Model="Non-proportional hazards")
+
+SurvChemo_1_5_10 <- SurvChemo %>%
+  filter(t %in% comparison_times) %>%
+  select(t, median) %>%
+  mutate(Model="Chemotherapy")
+
+SurvAtezo_1_5_10 <- SurvAtezo %>%
+  filter(t %in% comparison_times) %>%
+  select(t, median) %>%
+  mutate(Model="Atezolizumab")
+
+# Combine all models into one dataframe
+SurvModels_1_5_10 <- rbind(SurvPh_1_5_10, SurvNonPh_1_5_10, SurvChemo_1_5_10, SurvAtezo_1_5_10)
+
+# Pivot data to get wide format for the table, using mean to handle duplicates
+SurvTable <- SurvModels_1_5_10 %>%
+  pivot_wider(names_from = t, values_from = median, 
+              names_prefix = "Survival Probability at ",
+              values_fn = mean) %>%
+  # Multiply the survival probabilities by 100 to get percentages
+  mutate(across(starts_with("Survival Probability at "), ~ .x * 100))
+
+# Rename columns for clarity
+colnames(SurvTable) <- c("Model", "1-Year Survival Probability (%)", 
+                         "5-Year Survival Probability (%)", 
+                         "10-Year Survival Probability (%)")
+
+# Display the table using kable for presentation
+library(knitr)
+kable(SurvTable, 
+      col.names = c("Model", "1-Year Survival Probability (%)", 
+                    "5-Year Survival Probability (%)", 
+                    "10-Year Survival Probability (%)"), 
+      caption = "Predicted Survival Probabilities for Different Models (in %)") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F)
