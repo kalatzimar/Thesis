@@ -392,7 +392,7 @@ kable(ChemoParamMeandf,
 # Survival curve for each parametric model with shaded AUC
 
 # Define a function to plot survival curves with AUC
-plot_auc_curve <- function(times, survival_probs, col, model_name) {
+plot_auc_curve = function(times, survival_probs, col, model_name) {
   plot(times, survival_probs, type = "l", col = col, lwd = 2, ylim = c(0, 1), xlim = c(0, max(times)),
        xlab = "Time (Years)", ylab = "Survival Probability", main = paste("AUC for", model_name, "of Chemo"),xaxt = "n")
   axis(side=1, at=12*seq(from=0, to=ExtrapHorizon, by=1), labels=as.character(0:ExtrapHorizon))
@@ -482,7 +482,7 @@ All_IC = data.frame(Model = c(model_names,SplineNames),
 
 All_IC
 
-All_IC_sorted <- All_IC[order(All_IC$AIC), ]
+All_IC_sorted = All_IC[order(All_IC$AIC), ]
 All_IC_sorted
 
 BIC_IC_sorted = All_IC[order(All_IC$BIC),]
@@ -543,17 +543,17 @@ legend("topright",
 # ---- Survival probabilities for 1, 5 and 10 years
 # Time points of interest in months (since your models use months)
 
-time_points <- c(12, 60, 120) 
+time_points = c(12, 60, 120) 
 
-SurvExp <- summary(ChemoExp, t = time_points)[[1]]$est * 100
-SurvWeib <- summary(ChemoWeib, t = time_points)[[1]]$est * 100
-SurvGomp <- summary(ChemoGomp, t = time_points)[[1]]$est * 100
-SurvLogis <- summary(ChemoLogis, t = time_points)[[1]]$est * 100
-SurvNorm <- summary(ChemoNorm, t = time_points)[[1]]$est * 100
-SurvGen <- summary(ChemoGen, t = time_points)[[1]]$est * 100
+SurvExp = summary(ChemoExp, t = time_points)[[1]]$est * 100
+SurvWeib = summary(ChemoWeib, t = time_points)[[1]]$est * 100
+SurvGomp = summary(ChemoGomp, t = time_points)[[1]]$est * 100
+SurvLogis = summary(ChemoLogis, t = time_points)[[1]]$est * 100
+SurvNorm = summary(ChemoNorm, t = time_points)[[1]]$est * 100
+SurvGen = summary(ChemoGen, t = time_points)[[1]]$est * 100
 
 # Combine results into a data frame
-ChemoParamSurv <- data.frame(
+ChemoParamSurv = data.frame(
   Distribution = c("Exponential", "Weibull", "Gompertz", "Log-Logistic", "Log-Normal", "Generalized Gamma"),
   `1-Year Survival Probability (%)` = c(SurvExp[1], SurvWeib[1], SurvGomp[1], SurvLogis[1], SurvNorm[1], SurvGen[1]),
   `5-Year Survival Probability (%)` = c(SurvExp[2], SurvWeib[2], SurvGomp[2], SurvLogis[2], SurvNorm[2], SurvGen[2]),
@@ -568,17 +568,17 @@ kable(ChemoParamSurv,
 
 # ---- Spline Survival Probabilities
 
-SurvChemoSpline1 <- summary(ChemoSpline1, t = time_points)[[1]]$est * 100
-SurvChemoSpline2 <- summary(ChemoSpline2, t = time_points)[[1]]$est * 100
-SurvChemoSpline3 <- summary(ChemoSpline3, t = time_points)[[1]]$est * 100
-SurvChemoSplineDef <- summary(ChemoSplineDef, t = time_points)[[1]]$est * 100
-SurvChemoSplineDef2 <- summary(ChemoSplineDef2, t = time_points)[[1]]$est * 100
-SurvChemoSplineDef3 <- summary(ChemoSplineDef3, t = time_points)[[1]]$est * 100
+SurvChemoSpline1 = summary(ChemoSpline1, t = time_points)[[1]]$est * 100
+SurvChemoSpline2 = summary(ChemoSpline2, t = time_points)[[1]]$est * 100
+SurvChemoSpline3 = summary(ChemoSpline3, t = time_points)[[1]]$est * 100
+SurvChemoSplineDef = summary(ChemoSplineDef, t = time_points)[[1]]$est * 100
+SurvChemoSplineDef2 = summary(ChemoSplineDef2, t = time_points)[[1]]$est * 100
+SurvChemoSplineDef3 = summary(ChemoSplineDef3, t = time_points)[[1]]$est * 100
 
 # ---- Parametric and Spline models Survival Probabilities
 
 # Spline Model Results
-ChemoSplineSurv <- data.frame(
+ChemoSplineSurv = data.frame(
   Distribution = c("Spline 1", "Spline 2", "Spline 3", "Spline Def (log(19))", "Spline Def (log(19,29))", "Spline Def (log(11,19,29))"),
   `1-Year Survival Probability (%)` = c(SurvChemoSpline1[1], SurvChemoSpline2[1], SurvChemoSpline3[1], SurvChemoSplineDef[1], SurvChemoSplineDef2[1], SurvChemoSplineDef3[1]),
   `5-Year Survival Probability (%)` = c(SurvChemoSpline1[2], SurvChemoSpline2[2], SurvChemoSpline3[2], SurvChemoSplineDef[2], SurvChemoSplineDef2[2], SurvChemoSplineDef3[2]),
@@ -586,7 +586,7 @@ ChemoSplineSurv <- data.frame(
 )
 
 # Combine Parametric and Spline Results
-ChemoCombSurv <- rbind(ChemoParamSurv, ChemoSplineSurv)
+ChemoCombSurv = rbind(ChemoParamSurv, ChemoSplineSurv)
 
 kable(ChemoCombSurv, 
       col.names = c("Distribution", "1-Year Survival Probability (%)", "5-Year Survival Probability (%)", "10-Year Survival Probability (%)"),
@@ -687,8 +687,8 @@ AtezoIC = data.frame(Model = DistributionNames, AIC = AtezoAic$AIC, BIC = AtezoB
 AtezoIC
 
 # Find the row with the minimum AIC and BIC
-min_aic_row <- which.min(AtezoIC$AIC)
-min_bic_row <- which.min(AtezoIC$BIC)
+min_aic_row = which.min(AtezoIC$AIC)
+min_bic_row = which.min(AtezoIC$BIC)
 
 # Create the table with bold formatting for the rows with minimum AIC and BIC
 kable(AtezoIC, col.names = c("Model","AIC", "BIC"), 
@@ -793,7 +793,6 @@ lines(est~time, data = ExtrapAtezoGomp, type = "l", col = colors[3],lwd = 2)
 lines(est~time, data = ExtrapAtezoLogis, type = "l", col = colors[4],lwd = 2)
 lines(est~time, data = ExtrapAtezoNorm, type = "l", col = colors[5],lwd = 2)
 lines(est~time, data = ExtrapAtezoGen, type = "l", col = colors[6],lwd = 2)
-
 legend("topright", 
        legend = c("KM",DistributionNames),
        col = c(1,colors[1:6]),
@@ -827,7 +826,7 @@ kable(AtezoParamMeanDF,
 # Survival curve for each parametric model with shaded AUC
 
 # Define a function to plot survival curves with AUC
-plot_auc_curve <- function(times, survival_probs, col, model_name) {
+plot_auc_curve = function(times, survival_probs, col, model_name) {
   plot(times, survival_probs, type = "l", col = col, lwd = 2, ylim = c(0, 1), xlim = c(0, max(times)),
        xlab = "Time (Years)", ylab = "Survival Probability", main = paste("AUC for", model_name, "of Atezolizumab"),xaxt = "n")
   axis(side=1, at=12*seq(from=0, to=ExtrapHorizon, by=1), labels=as.character(0:ExtrapHorizon))
@@ -880,7 +879,6 @@ AtezoSplineBic = data.frame(AtezoSplineNames,atezo_spline_bic)
 AtezoAllIC = data.frame(Model = c(DistributionNames, AtezoSplineNames), 
                            AIC = c(AtezoAic$AIC, AtezoSplAIC$AIC),
                            BIC = c(AtezoBic$all_bic, AtezoSplineBic$atezo_spline_bic))
-dev.off()
 plot(AtezoKM$time,
      AtezoKM$surv,
      col = c(0,0), ylim = c(0,1),
@@ -905,8 +903,8 @@ legend("bottomleft",
 # Spline model with specified knots in months 11, 19 and 29 is the best model
 # among all 12 models fitted (standard parametric and spline based)
 
-AtezoMinAIC <- which.min(AtezoAllIC$AIC)
-AtezoMinBIC <- which.min(AtezoAllIC$BIC)
+AtezoMinAIC = which.min(AtezoAllIC$AIC)
+AtezoMinBIC = which.min(AtezoAllIC$BIC)
 
 kable(AtezoAllIC, 
       col.names = c("Model","AIC", "BIC"), 
@@ -921,12 +919,12 @@ add_footnote("Rows highlighted in red: model with smallest BIC",
                notation = "none")
 
 # Remove the specified rows and reorder by AIC in ascending order
-AtezoAllIC_filtered <- AtezoAllIC %>%
+AtezoAllIC_filtered = AtezoAllIC %>%
   filter(!Model %in% c("Knots in months 15, 31", "Knots in months 1, 15, 31")) %>%
   arrange(AIC)
 
-AtezoMinAIC <- which.min(AtezoAllIC_filtered$AIC)
-AtezoMinBIC <- which.min(AtezoAllIC_filtered$BIC)
+AtezoMinAIC = which.min(AtezoAllIC_filtered$AIC)
+AtezoMinBIC = which.min(AtezoAllIC_filtered$BIC)
 # Display the table
 kable(AtezoAllIC_filtered, 
       col.names = c("Model","AIC", "BIC"), 
@@ -1020,15 +1018,15 @@ round(summary(AtezoSplineDef, type='median')[[1]]['est'], 1)
 
 # ---- Survival Probabilities
 
-SurvAtezoExp <- summary(AtezoExp, t = time_points)[[1]]$est * 100
-SurvAtezoWeib <- summary(AtezoWeib, t = time_points)[[1]]$est * 100
-SurvAtezoGomp <- summary(AtezoGomp, t = time_points)[[1]]$est * 100
-SurvAtezoLogis <- summary(AtezoLogis, t = time_points)[[1]]$est * 100
-SurvAtezoNorm <- summary(AtezoNorm, t = time_points)[[1]]$est * 100
-SurvAtezoGen <- summary(AtezoGen, t = time_points)[[1]]$est * 100
+SurvAtezoExp = summary(AtezoExp, t = time_points)[[1]]$est * 100
+SurvAtezoWeib = summary(AtezoWeib, t = time_points)[[1]]$est * 100
+SurvAtezoGomp = summary(AtezoGomp, t = time_points)[[1]]$est * 100
+SurvAtezoLogis = summary(AtezoLogis, t = time_points)[[1]]$est * 100
+SurvAtezoNorm = summary(AtezoNorm, t = time_points)[[1]]$est * 100
+SurvAtezoGen = summary(AtezoGen, t = time_points)[[1]]$est * 100
 
 # Combine results into a data frame
-AtezoParamSurv <- data.frame(
+AtezoParamSurv = data.frame(
   Distribution = c("Exponential", "Weibull", "Gompertz", "Log-Logistic", "Log-Normal", "Generalized Gamma"),
   `1-Year Survival Probability (%)` = c(SurvAtezoExp[1], SurvAtezoWeib[1], SurvAtezoGomp[1], SurvAtezoLogis[1], SurvAtezoNorm[1], SurvAtezoGen[1]),
   `5-Year Survival Probability (%)` = c(SurvAtezoExp[2], SurvAtezoWeib[2], SurvAtezoGomp[2], SurvAtezoLogis[2], SurvAtezoNorm[2], SurvAtezoGen[2]),
@@ -1043,15 +1041,15 @@ kable(AtezoParamSurv,
 
 # Spline models
 
-SurvAtezoSpline1 <- summary(AtezoSpline1, t = time_points)[[1]]$est * 100
-SurvAtezoSpline2 <- summary(AtezoSpline2, t = time_points)[[1]]$est * 100
-SurvAtezoSpline3 <- summary(AtezoSpline3, t = time_points)[[1]]$est * 100
-SurvAtezoSplineDef <- summary(AtezoSplineDef, t = time_points)[[1]]$est * 100
-SurvAtezoSplineDef2 <- summary(AtezoSplineDef2, t = time_points)[[1]]$est * 100
-SurvAtezoSplineDef3 <- summary(AtezoSplineDef3, t = time_points)[[1]]$est * 100
+SurvAtezoSpline1 = summary(AtezoSpline1, t = time_points)[[1]]$est * 100
+SurvAtezoSpline2 = summary(AtezoSpline2, t = time_points)[[1]]$est * 100
+SurvAtezoSpline3 = summary(AtezoSpline3, t = time_points)[[1]]$est * 100
+SurvAtezoSplineDef = summary(AtezoSplineDef, t = time_points)[[1]]$est * 100
+SurvAtezoSplineDef2 = summary(AtezoSplineDef2, t = time_points)[[1]]$est * 100
+SurvAtezoSplineDef3 = summary(AtezoSplineDef3, t = time_points)[[1]]$est * 100
 
 # Combine results into a data frame for splines
-AtezoSplineSurv <- data.frame(
+AtezoSplineSurv = data.frame(
   Distribution = c("Spline 1", "Spline 2", "Spline 3", "Spline Def (log(31))", "Spline Def (log(15,31))", "Spline Def (log(1,15,31))"),
   `1-Year Survival Probability (%)` = c(SurvAtezoSpline1[1], SurvAtezoSpline2[1], SurvAtezoSpline3[1], SurvAtezoSplineDef[1], SurvAtezoSplineDef2[1], SurvAtezoSplineDef3[1]),
   `5-Year Survival Probability (%)` = c(SurvAtezoSpline1[2], SurvAtezoSpline2[2], SurvAtezoSpline3[2], SurvAtezoSplineDef[2], SurvAtezoSplineDef2[2], SurvAtezoSplineDef3[2]),
@@ -1065,7 +1063,7 @@ kable(AtezoSplineSurv,
   kable_styling(bootstrap_options = "striped")
 
 # Combine both parametric and spline results into one data frame
-AtezoCombSurv <- rbind(AtezoParamSurv, AtezoSplineSurv)
+AtezoCombSurv = rbind(AtezoParamSurv, AtezoSplineSurv)
 
 kable(AtezoCombSurv, 
       col.names = c("Model/Distribution", "1-Year Survival Probability (%)", "5-Year Survival Probability (%)", "10-Year Survival Probability (%)"),
