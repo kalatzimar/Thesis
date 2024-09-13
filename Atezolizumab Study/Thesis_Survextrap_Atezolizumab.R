@@ -19,6 +19,7 @@ library(muhaz)
 library(tidyverse)
 library(kableExtra)
 library(magrittr)
+library(readxl)
 ################################################################################
 
 ################################ LOAD DATA #####################################
@@ -51,7 +52,7 @@ AtezoArm = AtezoDf[AtezoDf$Arm == "Atezolizumab",]
 # Set up the default spline to allow changes in the hazard for up to 20 years.
 # After that, we don't expect to see other changes, or we are not interested.
 
-mspline = mspline_spec(Surv(Time, Event) ~ 1, data=AtezoDf, df=7, add_knots=20)
+mspline = mspline_spec(Surv(Time, Event) ~ 1, data=AtezoDf, df=7, add_knots=240)
 
 # ---- HAZARD SCALE PARAMETER (η) PRIOR
 # for prior η to be specified, we think about the median age (64) of the trial
@@ -59,7 +60,7 @@ mspline = mspline_spec(Surv(Time, Event) ~ 1, data=AtezoDf, df=7, add_knots=20)
 # but with variance chosen so that mean survival could be as high as 100 years 
 # after diagnosis"
 
-prior_hscale = p_meansurv(median=25, upper=100, mspline=mspline)
+prior_hscale = p_meansurv(median=25*12, upper=100*12, mspline=mspline)
 
 # function prior_haz_const() translates a normal prior for η to the corresponding
 # beliefs about survival. Using this function we can check that the lower limit 
@@ -179,9 +180,8 @@ rescomp %>%
 
 # ---- Compare different models
 
-
 # ---- Proportional Hazards model
-chains = 4
+chains = 3
 iter = 2000
 TreatPh = survextrap(Surv(Time, Event) ~ Arm, data=AtezoDf, 
                      mspline=mspline, 
@@ -222,7 +222,7 @@ SurvAtezo = survival(AtezoMod, tmax=times) %>%
 
 SurvModels = rbind(SurvPh, SurvNonPh, SurvChemo, SurvAtezo)
 
-ggplot(SurvModels, aes(x=t, y=median, col=Model, lty=Arm)) + 
+pp = ggplot(SurvModels, aes(x=t, y=median, col=Model, lty=Arm)) + 
   geom_step(data=TreatPh$km, aes(x=time, y=surv, lty=Arm), lwd=1.3,
             inherit.aes = FALSE) +
   geom_line(lwd=1.1) + 
@@ -288,7 +288,7 @@ TreatCompf <- TreatComp %>%
          )) %>%
   select(model, t, rm, rm2, looic) %>%
   tibble::remove_rownames()
-?rmst
+
 knitr::kable(TreatCompf, col.names=c("Model","Time horizon (years)",
                                    "RMST Chemotherapy (CI)",
                                    "RMST Atezolizumab (CI)",
@@ -304,7 +304,6 @@ kable(TreatCompf,
   row_spec(3, extra_css = "border-bottom: 1px solid blue;") %>%
   row_spec(6, extra_css = "border-bottom: 1px solid blue;")
 
-?survival
 
 # ---- Survival Probabilities
 # Define time points for 1-year, 5-year, and 10-year survival probabilities
@@ -378,4 +377,103 @@ kable(SurvTable_CI_cleaned,
       caption = "Predicted Survival Probabilities with Confidence Intervals (in %)") %>%
   kable_styling(bootstrap_options = "striped", full_width = F) %>%
   row_spec(0, bold = TRUE)  # To emphasize the header (optional)
+
+# ---- External Registry Data for Chemotherapy group
+
+ExternalPath = "C:/Users/kalat/OneDrive/Desktop/Thesis/Lung Cancer Statistics/DeathsByAgeUK.xlsx"
+External = read_excel(ExternalPath, sheet = 4)
+
+ExternalDf = as.data.frame(External)
+colnames(ExternalDf) = c("start","stop","r","n","treat")
+
+ExternalDf$treat = factor(ExternalDf$treat)
+ExternalDf$n = round(as.integer(ExternalDf$n)/10000)
+ExternalDf$r = round(as.integer(ExternalDf$r)/10000)
+ExternalDf$start = ExternalDf$start*12
+ExternalDf$stop = ExternalDf$stop*12
+
+ExternalDf <- ExternalDf %>%
+  mutate(
+    haz = -log(r / n),  # Hazard estimate
+    haz_lower = -log(qbeta(0.975, r, n - r)),  # Lower bound of hazard
+    haz_upper = -log(qbeta(0.025, r, n - r))   # Upper bound of hazard
+  )
+?cetux_seer
+# View the updated ExternalDf with hazard and CIs
+ExternalDf
+mspline_registry = mspline_spec(Surv(Time, Event) ~ 1, data=AtezoDf, df=7,  add_knots=c(120, 180, 240))
+
+
+ChemoModRegistry = survextrap(Surv(Time, Event) ~ 1, 
+                              data=ChemoArm, 
+                              external = ExternalDf,
+                              mspline=mspline_registry,
+                              prior_hscale=prior_hscale, 
+                              prior_hsd = prior_hsd,
+                              chains = 2)
+ChemoModRegistry
+
+plot(ChemoModRegistry)
+
+# Extract survival data for Kaplan-Meier curve
+km_data <- ChemoMod$km
+# Extract survival data from both models
+SurvChemo <- survival(ChemoMod, tmax = times) %>%
+  mutate(Model = "Without external data")
+SurvChemoRegistry <- survival(ChemoModRegistry, tmax = times) %>%
+  mutate(Model = "With external data")
+
+# Extract hazard data from both models
+HazChemo <- hazard(ChemoMod, tmax = times) %>%
+  mutate(Model = "Without external data")
+HazChemoRegistry <- hazard(ChemoModRegistry, tmax = times) %>%
+  mutate(Model = "With external data")
+
+# Combine survival and hazard data into respective data frames
+SurvData <- rbind(SurvChemo, SurvChemoRegistry)
+HazData <- rbind(HazChemo, HazChemoRegistry)
+
+# Plot survival comparison with CIs and KM line
+ggplot(SurvData, aes(x = t, y = median, col = Model, fill = Model)) + 
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, color = NA) +
+  geom_line(size = 1.2) + 
+  geom_step(data = km_data, aes(x = time, y = surv), color = "black", linetype = "dashed", size = 1.2, inherit.aes = FALSE) +
+  labs(title = "Survival Curves Comparison with Kaplan-Meier",
+       x = "Time (Years)", 
+       y = "Survival Probability") +
+  theme_minimal() + 
+  theme(legend.position = "top") +
+  scale_x_continuous(labels = function(x) round(x / 12, 0)) +  # Convert months to years
+  scale_color_viridis(discrete = TRUE) + 
+  scale_fill_viridis(discrete = TRUE) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+# Plot hazard comparison with CIs
+ggplot(HazData, aes(x = t, y = median, col = Model, fill = Model)) + 
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, color = NA) +
+  geom_line(size = 1.2) + 
+  labs(title = "Hazard Curves Comparison",
+       x = "Time (Years)", 
+       y = "Hazard Rate") +
+  theme_minimal() + 
+  theme(legend.position = "top") +
+  scale_x_continuous(labels = function(x) round(x / 12, 0)) +  # Convert months to years
+  scale_color_viridis(discrete = TRUE) + 
+  scale_fill_viridis(discrete = TRUE) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+ggplot(HazData, aes(x = t, y = median, col = Model, fill = Model)) + 
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, colour = NA) +
+  geom_line() +
+    geom_step(data = ExternalDf, aes(x = start, y = haz), col = "gray30", inherit.aes = FALSE) +
+  geom_step(data = ExternalDf, aes(x = start, y = haz_lower), col = "gray70", linetype = 2, inherit.aes = FALSE) +
+  geom_step(data = ExternalDf, aes(x = start, y = haz_upper), col = "gray70", linetype = 2, inherit.aes = FALSE) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Years after diagnosis") + 
+  ylab("Hazard") +
+  scale_color_viridis(discrete = TRUE) + 
+  scale_fill_viridis(discrete = TRUE) + 
+  geom_vline(xintercept = max(ChemoArm$Time)) +  # KM cutoff for ChemoMod
+  theme(legend.position = c(0.4, 0.9), legend.background = element_blank()) +
+  labs(col = NULL, fill = NULL)
 
