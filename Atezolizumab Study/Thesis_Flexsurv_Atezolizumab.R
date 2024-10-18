@@ -278,7 +278,7 @@ kable(ChemoIC,
       ) %>% 
   kable_styling(bootstrap_options = "striped")
 
-# / Log-logistic model has the lowest AIC and BIC values 
+#  Log-logistic model has the lowest AIC and BIC values 
 
 # ---- Hazard plot
 
@@ -411,9 +411,9 @@ dev.off()
 
 # ---- Spline Modeling
 
-ChemoSpline1 = flexsurvspline(Surv(Time, Event) ~ 1, data = ChemoArm, knots = 1, scale = "hazard")
-ChemoSpline2 = flexsurvspline(Surv(Time, Event) ~ 1, data = ChemoArm, knots = 2, scale = "hazard")
-ChemoSpline3 = flexsurvspline(Surv(Time, Event) ~ 1, data = ChemoArm, knots = 3, scale = "hazard")
+ChemoSpline1 = flexsurvspline(Surv(Time, Event) ~ 1, data = ChemoArm, k = 1, scale = "hazard")
+ChemoSpline2 = flexsurvspline(Surv(Time, Event) ~ 1, data = ChemoArm, k = 2, scale = "hazard")
+ChemoSpline3 = flexsurvspline(Surv(Time, Event) ~ 1, data = ChemoArm, k = 3, scale = "hazard")
 ChemoSplineDef = flexsurvspline(Surv(Time, Event) ~ 1, data = ChemoArm, knots = log(c(19)), scale = "hazard")
 ChemoSplineDef2 = flexsurvspline(Surv(Time, Event) ~ 1, data = ChemoArm, knots = log(c(19,29)), scale = "hazard")
 ChemoSplineDef3 = flexsurvspline(Surv(Time, Event) ~ 1, data = ChemoArm, knots = log(c(11,19,29)), scale = "hazard")
@@ -510,6 +510,77 @@ legend("bottomleft",
        bty    = "n")
 
 
+# ---- Extrapolation for Splines
+
+Years = 20
+ExtrapHorizon = 12*Years 
+times = seq(0,ExtrapHorizon, by = 1)
+
+ExtrapSpline1 = summary(ChemoSpline1, t = times)[[1]]
+ExtrapSpline2 = summary(ChemoSpline2, t = times)[[1]]
+ExtrapSpline3 = summary(ChemoSpline3, t = times)[[1]]
+ExtrapSpline1_Custom = summary(ChemoSplineDef, t = times)[[1]]
+ExtrapSpline2_Custom = summary(ChemoSplineDef2, t = times)[[1]]
+ExtrapSpline3_Custom = summary(ChemoSplineDef3, t = times)[[1]]
+
+# Plot the extrapolated survival curves
+plot(NULL, xlim = c(0,12*Years), ylim = c(0, 1), 
+     xlab = "Time (Years)", ylab = "Survival Probability", 
+     main = "Extrapolated Survival Curves for Chemotherapy Group",
+     xaxt = "n")
+axis(side=1, at=12*seq(from=0, to=ExtrapHorizon, by=1), labels=as.character(0:ExtrapHorizon))
+lines(ChemoKM, lwd = 2)
+lines(est~time, data = ExtrapSpline1, type = "l", col = colors[1],lwd = 2)
+lines(est~time, data = ExtrapSpline2, type = "l", col = colors[2],lwd = 2)
+lines(est~time, data = ExtrapSpline3, type = "l", col = colors[3],lwd = 2)
+lines(est~time, data = ExtrapSpline1_Custom, type = "l", col = colors[4],lwd = 2)
+lines(est~time, data = ExtrapSpline2_Custom, type = "l", col = colors[5],lwd = 2)
+lines(est~time, data = ExtrapSpline3_Custom, type = "l", col = colors[6],lwd = 2)
+
+legend("topright", 
+       legend = c("KM",SplineNames),
+       col = c(1,colors),
+       lty = 1,
+       lwd = 2,
+       bty = "n")
+
+# Mean survival times
+ChemoSpline1Mean = mean_survspline1(gamma0=ChemoSpline1$res[1, 1],
+                 gamma1=ChemoSpline1$res[2, 1],
+                 gamma2=ChemoSpline1$res[3, 1],
+                 knots=ChemoSpline1$knots)        
+
+ChemoSpline2Mean = mean_survspline2(gamma0=ChemoSpline2$res[1, 1],
+                                    gamma1=ChemoSpline2$res[2, 1],
+                                    gamma2=ChemoSpline2$res[3, 1],
+                                    gamma3=ChemoSpline2$res[4, 1],
+                                    knots=ChemoSpline2$knots)     
+
+ChemoSpline3Mean = mean_survspline3(gamma0=ChemoSpline3$res[1, 1],
+                                    gamma1=ChemoSpline3$res[2, 1],
+                                    gamma2=ChemoSpline3$res[3, 1],
+                                    gamma3=ChemoSpline3$res[4, 1],
+                                    gamma4=ChemoSpline3$res[5, 1],
+                                    knots=ChemoSpline3$knots)
+
+ChemoSplineDefMean = mean_survspline1(gamma0=ChemoSplineDef$res[1, 1],
+                                      gamma1=ChemoSplineDef$res[2, 1],
+                                      gamma2=ChemoSplineDef$res[3, 1],
+                                      knots=ChemoSplineDef$knots)
+
+ChemoSplineDef2Mean = mean_survspline2(gamma0=ChemoSplineDef2$res[1, 1],
+                                       gamma1=ChemoSplineDef2$res[2, 1],
+                                       gamma2=ChemoSplineDef2$res[3, 1],
+                                       gamma3=ChemoSplineDef2$res[4, 1],
+                                       knots=ChemoSplineDef2$knots) 
+
+ChemoSplineDef3Mean = mean_survspline3(gamma0=ChemoSplineDef3$res[1, 1],
+                                       gamma1=ChemoSplineDef3$res[2, 1],
+                                       gamma2=ChemoSplineDef3$res[3, 1],
+                                       gamma3=ChemoSplineDef3$res[4, 1],
+                                       gamma4=ChemoSplineDef3$res[5, 1],
+                                       knots=ChemoSplineDef3$knots)
+
 # ---- Extrapolation Parametric Survival Curves
 
 Years = 20
@@ -541,7 +612,7 @@ legend("topright",
 
 
 # ---- Survival probabilities for 1, 5 and 10 years
-# Time points of interest in months (since your models use months)
+# Time points of interest in months 
 
 time_points = c(12, 60, 120) 
 
@@ -845,9 +916,9 @@ dev.off()
 
 # ---- Spline Modeling
 
-AtezoSpline1 = flexsurvspline(Surv(Time, Event) ~ 1, data = AtezoArm, knots = 1, scale = "hazard")
-AtezoSpline2 = flexsurvspline(Surv(Time, Event) ~ 1, data = AtezoArm, knots = 2, scale = "hazard")
-AtezoSpline3 = flexsurvspline(Surv(Time, Event) ~ 1, data = AtezoArm, knots = 3, scale = "hazard")
+AtezoSpline1 = flexsurvspline(Surv(Time, Event) ~ 1, data = AtezoArm, k = 1, scale = "hazard")
+AtezoSpline2 = flexsurvspline(Surv(Time, Event) ~ 1, data = AtezoArm, k = 2, scale = "hazard")
+AtezoSpline3 = flexsurvspline(Surv(Time, Event) ~ 1, data = AtezoArm, k = 3, scale = "hazard")
 AtezoSplineDef = flexsurvspline(Surv(Time, Event) ~ 1, data = AtezoArm, knots = log(c(31)), scale = "hazard")
 AtezoSplineDef2 = flexsurvspline(Surv(Time, Event) ~ 1, data = AtezoArm, knots = log(c(15,31)), scale = "hazard")
 AtezoSplineDef3 = flexsurvspline(Surv(Time, Event) ~ 1, data = AtezoArm, knots = log(c(1,15,31)), scale = "hazard")
@@ -979,6 +1050,77 @@ legend("topright",
        lty = 1,
        lwd = 2,
        bty = "n")
+
+
+# ---- Extrapolation Splines
+
+ExtrapHorizon = 12*Years
+times = seq(0,ExtrapHorizon, by = 1)
+
+ExtrapAtSpline1 = summary(AtezoSpline1, t = times)[[1]]
+ExtrapAtSpline2 = summary(AtezoSpline2, t = times)[[1]]
+ExtrapAtSpline3 = summary(AtezoSpline3, t = times)[[1]]
+ExtrapAtSplineDef = summary(AtezoSplineDef, t = times)[[1]]
+ExtrapAtSplineDef2 = summary(AtezoSplineDef2, t = times)[[1]]
+ExtrapAtSplineDef3 = summary(AtezoSplineDef3, t = times)[[1]]
+
+# Plot the extrapolated survival curves
+plot(NULL, xlim = c(0,12*Years), ylim = c(0, 1), 
+     xlab = "Time (Years)", ylab = "Survival Probability", 
+     main = "Extrapolated Survival Curves for Atezolizumab Group",
+     xaxt = "n")
+axis(side=1, at=12*seq(from=0, to=ExtrapHorizon, by=1), labels=as.character(0:ExtrapHorizon))
+lines(AtezoKM, lwd = 2)
+lines(est~time, data = ExtrapAtSpline1, type = "l", col = colors[1],lwd = 2)
+lines(est~time, data = ExtrapAtSpline2, type = "l", col = colors[2],lwd = 2)
+lines(est~time, data = ExtrapAtSpline3, type = "l", col = colors[3],lwd = 2)
+lines(est~time, data = ExtrapAtSplineDef, type = "l", col = colors[4],lwd = 2)
+lines(est~time, data = ExtrapAtSplineDef2, type = "l", col = colors[5],lwd = 2)
+lines(est~time, data = ExtrapAtSplineDef3, type = "l", col = colors[6],lwd = 2)
+legend("topright", 
+       legend = c("KM",DistributionNames),
+       col = c(1,colors[1:6]),
+       lty = 1,
+       lwd = 2,
+       bty = "n")
+
+# Mean survival times
+AtezoSpline1Mean = mean_survspline1(gamma0=AtezoSpline1$res[1, 1],
+                                    gamma1=AtezoSpline1$res[2, 1],
+                                    gamma2=AtezoSpline1$res[3, 1],
+                                    knots=AtezoSpline1$knots)        
+
+AtezoSpline2Mean = mean_survspline2(gamma0=AtezoSpline2$res[1, 1],
+                                    gamma1=AtezoSpline2$res[2, 1],
+                                    gamma2=AtezoSpline2$res[3, 1],
+                                    gamma3=AtezoSpline2$res[4, 1],
+                                    knots=AtezoSpline2$knots)     
+
+AtezoSpline3Mean = mean_survspline3(gamma0=AtezoSpline3$res[1, 1],
+                                    gamma1=AtezoSpline3$res[2, 1],
+                                    gamma2=AtezoSpline3$res[3, 1],
+                                    gamma3=AtezoSpline3$res[4, 1],
+                                    gamma4=AtezoSpline3$res[5, 1],
+                                    knots=AtezoSpline3$knots)
+
+AtezoSplineDefMean = mean_survspline1(gamma0=AtezoSplineDef$res[1, 1],
+                                      gamma1=AtezoSplineDef$res[2, 1],
+                                      gamma2=AtezoSplineDef$res[3, 1],
+                                      knots=AtezoSplineDef$knots)
+
+AtezoSplineDef2Mean = mean_survspline2(gamma0=AtezoSplineDef2$res[1, 1],
+                                       gamma1=AtezoSplineDef2$res[2, 1],
+                                       gamma2=AtezoSplineDef2$res[3, 1],
+                                       gamma3=AtezoSplineDef2$res[4, 1],
+                                       knots=AtezoSplineDef2$knots) 
+
+AtezoSplineDef3Mean = mean_survspline3(gamma0=AtezoSplineDef3$res[1, 1],
+                                       gamma1=AtezoSplineDef3$res[2, 1],
+                                       gamma2=AtezoSplineDef3$res[3, 1],
+                                       gamma3=AtezoSplineDef3$res[4, 1],
+                                       gamma4=AtezoSplineDef3$res[5, 1],
+                                       knots=AtezoSplineDef3$knots)
+
 
 # ---- Summaries
 

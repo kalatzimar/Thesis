@@ -5,6 +5,8 @@
 # Date   : August 2024
 ################################################################################
 
+rm(list = ls())
+
 ################################ LOAD PACKAGES #################################
 library(survextrap)
 library(readODS)
@@ -43,6 +45,8 @@ head(AtezoDf)
 AtezoDf = data.frame(AtezoDf)
 AtezoDf$Arm = factor(AtezoDf$Arm, labels = c("Chemotherapy", "Atezolizumab"))
 
+AtezoDf$Time = AtezoDf$Time /12
+
 ChemoArm = AtezoDf[AtezoDf$Arm == "Chemotherapy",]
 AtezoArm = AtezoDf[AtezoDf$Arm == "Atezolizumab",]
 
@@ -52,7 +56,7 @@ AtezoArm = AtezoDf[AtezoDf$Arm == "Atezolizumab",]
 # Set up the default spline to allow changes in the hazard for up to 20 years.
 # After that, we don't expect to see other changes, or we are not interested.
 
-mspline = mspline_spec(Surv(Time, Event) ~ 1, data=AtezoDf, df=7, add_knots=240)
+mspline = mspline_spec(Surv(Time, Event) ~ 1, data=AtezoDf, df=10, add_knots=20)
 
 # ---- HAZARD SCALE PARAMETER (η) PRIOR
 # for prior η to be specified, we think about the median age (64) of the trial
@@ -60,7 +64,7 @@ mspline = mspline_spec(Surv(Time, Event) ~ 1, data=AtezoDf, df=7, add_knots=240)
 # but with variance chosen so that mean survival could be as high as 100 years 
 # after diagnosis"
 
-prior_hscale = p_meansurv(median=25*12, upper=100*12, mspline=mspline)
+prior_hscale = p_meansurv(median=25, upper=100, mspline=mspline)
 
 # function prior_haz_const() translates a normal prior for η to the corresponding
 # beliefs about survival. Using this function we can check that the lower limit 
@@ -78,7 +82,7 @@ prior_haz_const(mspline, prior_hscale = prior_hscale)
 # quantity returned (hr represents the wanted result for ρ)"
 
 set.seed(178)
-prior_hsd = p_gamma(2, 5)
+prior_hsd = p_gamma(2, 4)
 prior_haz_sd(mspline = mspline,
              prior_hsd = prior_hsd,
              prior_hscale = prior_hscale)
@@ -181,7 +185,7 @@ rescomp %>%
 # ---- Compare different models
 
 # ---- Proportional Hazards model
-chains = 3
+chains = 2
 iter = 2000
 TreatPh = survextrap(Surv(Time, Event) ~ Arm, data=AtezoDf, 
                      mspline=mspline, 
@@ -201,7 +205,8 @@ TreatNonPh = survextrap(Surv(Time, Event) ~ Arm, data=AtezoDf,
 # ---- Fit arms separately 
 
 ChemoMod = survextrap(Surv(Time, Event) ~ 1, data=ChemoArm, mspline=mspline,
-                                   prior_hscale=prior_hscale, prior_hsd = prior_hsd)
+                                   prior_hscale=prior_hscale, chains = chains,
+                      iter = iter, prior_hsd = prior_hsd)
 
 AtezoMod = survextrap(Surv(Time, Event) ~ 1, data=AtezoArm, mspline=mspline, 
                       chains=chains, iter=iter,
@@ -209,7 +214,7 @@ AtezoMod = survextrap(Surv(Time, Event) ~ 1, data=AtezoArm, mspline=mspline,
 
 # ---- VISUALIZATION
 years = 20
-times = years*12
+times = years
 SurvPh = survival(TreatPh, tmax=times) %>% mutate(Model="Proportional hazards")
 
 SurvNonPh = survival(TreatNonPh, tmax=times) %>% mutate(Model="Non-proportional hazards")
@@ -229,38 +234,168 @@ pp = ggplot(SurvModels, aes(x=t, y=median, col=Model, lty=Arm)) +
   labs(lty="Treatment", col=NULL) +
   ggtitle("Model Comparison without external data")+
   theme_minimal() +
-  theme(legend.position = c(0.6, 0.8)) +
+  theme(legend.position = c(0.6, 0.8), 
+        legend.box = "vertical",  
+        legend.title = element_text(size=14, face="bold"),
+        legend.text = element_text(size = 16),
+        axis.title = element_text(size=14),  # Increase the axis title text size
+        axis.text = element_text(size=12),  # Increase the axis text size
+        plot.title = element_text(size=16, face="bold"),
+        legend.box.just = "left") +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  scale_x_continuous(labels = function(x) round(x / 12, 0)) + 
   xlab("Years after diagnosis") + 
   ylab("Survival probability") +
   scale_color_viridis(discrete=TRUE) + 
   geom_vline(xintercept = max(ChemoArm$Time))
 
+# ---- four different graphs
+
+# Proportional Hazards Model
+ggplot(SurvPh, aes(x=t, y=median, col=Arm)) + 
+  geom_step(data=TreatPh$km, aes(x=time, y=surv, lty = Arm), lwd=1.3, inherit.aes = FALSE) +
+  geom_ribbon(aes(ymin=lower, ymax=upper, fill=Arm), alpha=0.2, linetype=0) +  # Shaded CI for Chemotherapy
+  geom_line(lwd=1.1) + 
+  labs(lty="Treatment", col="Arm") + 
+  ggtitle("Proportional Hazards Model") +
+  theme_minimal() +
+  theme(legend.position = c(0.6, 0.8), 
+        legend.box = "vertical",  
+        legend.title = element_text(size=14, face="bold"),
+        legend.text = element_text(size = 12),
+        axis.title = element_text(size=14),  # Increase the axis title text size
+        axis.text = element_text(size=12),  # Increase the axis text size
+        plot.title = element_text(size=16, face="bold"),
+        legend.box.just = "left") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Years after diagnosis") + 
+  ylab("Survival probability") +
+  scale_color_manual(values=c("Chemotherapy" = "#FDE725", "Atezolizumab" = "#440154")) +  # Yellow for Chemo, Purple for Atezo
+  scale_fill_manual(values=c("Chemotherapy" = "#FDE725", "Atezolizumab" = "#440154")) +  # Match CI fill colors
+  geom_vline(xintercept = max(ChemoArm$Time))
+
+# Non-Proportional Hazards Model
+
+
+# Proportional Hazards Model
+ggplot(SurvNonPh, aes(x=t, y=median, col=Arm)) + 
+  geom_step(data=TreatNonPh$km, aes(x=time, y=surv, lty = Arm), lwd=1.3, inherit.aes = FALSE) +
+  geom_ribbon(aes(ymin=lower, ymax=upper, fill=Arm), alpha=0.2, linetype=0) +  # Shaded CI for Chemotherapy
+  geom_line(lwd=1.1) + 
+  labs(lty="Treatment", col="Arm") + 
+  ggtitle("Non Proportional Hazards Model") +
+  theme_minimal() +
+  theme(legend.position = c(0.6, 0.8), 
+        legend.box = "vertical",  
+        legend.title = element_text(size=14, face="bold"),
+        legend.text = element_text(size = 12),
+        axis.title = element_text(size=14),  # Increase the axis title text size
+        axis.text = element_text(size=12),  # Increase the axis text size
+        plot.title = element_text(size=16, face="bold"),
+        legend.box.just = "left") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Years after diagnosis") + 
+  ylab("Survival probability") +
+  scale_color_manual(values=c("Chemotherapy" = "#FDE725", "Atezolizumab" = "#440154")) +  # Yellow for Chemo, Purple for Atezo
+  scale_fill_manual(values=c("Chemotherapy" = "#FDE725", "Atezolizumab" = "#440154")) +  # Match CI fill colors
+  geom_vline(xintercept = max(ChemoArm$Time))
+
+
+# Proportional and Non-proportional
+
+# Combine the datasets from Proportional and Non-Proportional Hazards models
+SurvCombined <- rbind(SurvPh %>% mutate(Model = "Proportional Hazards"),
+                      SurvNonPh %>% mutate(Model = "Non-Proportional Hazards"))
+
+# Combined Plot: Proportional vs Non-Proportional Hazards
+ggplot(SurvCombined, aes(x=t, y=median, col=Model, lty=Arm)) + 
+  geom_step(data=TreatPh$km, aes(x=time, y=surv, lty = Arm), lwd=1.3, inherit.aes = FALSE) +
+  geom_line(lwd=1.1) + 
+  labs(lty="Treatment", col="Model") + 
+  ggtitle("Proportional vs Non-Proportional Hazards Model") +
+  theme_minimal() +
+  theme(legend.position = c(0.6, 0.8), 
+        legend.box = "vertical",  
+        legend.title = element_text(size=14, face="bold"),
+        legend.text = element_text(size = 12),
+        axis.title = element_text(size=14),  # Increase the axis title text size
+        axis.text = element_text(size=12),  # Increase the axis text size
+        plot.title = element_text(size=16, face="bold"),
+        legend.box.just = "left") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Years after diagnosis") + 
+  ylab("Survival probability") +
+  scale_color_viridis(discrete=TRUE) + 
+  geom_vline(xintercept = max(ChemoArm$Time))
+
+
+# Chemotherapy Plot with Confidence Intervals and Yellow Color
+ggplot(SurvChemo, aes(x=t, y=median, col=Arm)) + 
+  geom_ribbon(aes(ymin=lower, ymax=upper, fill=Arm), alpha=0.2, linetype=0) +  # Shaded CI for Chemotherapy
+  geom_step(data=ChemoMod$km, aes(x=time, y=surv), lwd=1.3, inherit.aes = FALSE, lty=2) +  # Step curve for KM estimates
+  geom_line(lwd=1.1) + 
+  labs(lty="Treatment", col="Arm", fill="Arm") +  # Add fill legend for CI
+  ggtitle("Chemotherapy Arm") +
+  theme_minimal() +
+  theme(legend.position = c(0.6, 0.8), 
+        legend.box = "vertical",  
+        legend.title = element_text(size=14, face="bold"),
+        legend.text = element_text(size=12),
+        axis.title = element_text(size=14),  # Increase axis title size
+        axis.text = element_text(size=12),  # Increase axis text size
+        plot.title = element_text(size=16, face="bold"),
+        legend.box.just = "left") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Years after diagnosis") + 
+  ylab("Survival probability") +
+  scale_color_manual(values=c("Chemotherapy" = "#FDE725")) +  # Assign yellow color to Chemotherapy
+  scale_fill_manual(values=c("Chemotherapy" = "#FDE725")) +  # Assign yellow color to CI
+  geom_vline(xintercept = max(ChemoArm$Time))
+
+# Atezolizumab Plot with Confidence Intervals and Purple Color
+ggplot(SurvAtezo, aes(x=t, y=median, col=Arm)) + 
+  geom_ribbon(aes(ymin=lower, ymax=upper, fill=Arm), alpha=0.2, linetype=0) +  # Shaded CI for Atezolizumab
+  geom_step(data=AtezoMod$km, aes(x=time, y=surv), lwd=1.3, inherit.aes = FALSE, lty = 2) +  # Step curve for KM estimates
+  geom_line(lwd=1.1) + 
+  labs(lty="Treatment", col="Arm", fill="Arm") +  # Add fill legend for CI
+  ggtitle("Atezolizumab Arm") +
+  theme_minimal() +
+  theme(legend.position = c(0.6, 0.8), 
+        legend.box = "vertical",  
+        legend.title = element_text(size=14, face="bold"),
+        legend.text = element_text(size=12),
+        axis.title = element_text(size=14),  # Increase axis title size
+        axis.text = element_text(size=12),  # Increase axis text size
+        plot.title = element_text(size=16, face="bold"),
+        legend.box.just = "left") +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Years after diagnosis") + 
+  ylab("Survival probability") +
+  scale_color_manual(values=c("Atezolizumab" = "#440154")) +  # Assign purple color to Atezolizumab
+  scale_fill_manual(values=c("Atezolizumab" = "#440154")) +  # Assign purple color to CI
+  geom_vline(xintercept = max(ChemoArm$Time))
+
+
 # ---- Model Summaries
 
 ModelComp <- function(mod){
-  rm <- rmst(mod, niter=1000, newdata=data.frame(Arm="Chemotherapy"), t=c(36,120,240)) %>% 
+  rm <- rmst(mod, niter=1000, newdata=data.frame(Arm="Chemotherapy"), t=c(3,10,20)) %>% 
     rename(rm_med="median", rm_lower="lower", rm_upper="upper") %>% 
     select(t, rm_med, rm_lower, rm_upper)
-  rm2 <- rmst(mod, niter=1000, newdata=data.frame(Arm="Atezolizumab"), t=c(36,120,240)) %>% 
+  rm2 <- rmst(mod, niter=1000, newdata=data.frame(Arm="Atezolizumab"), t=c(3,10,20)) %>% 
     rename(rm_med2="median", rm_lower2="lower", rm_upper2="upper") %>% 
     select(rm_med2, rm_lower2, rm_upper2)
-  cbind(name=deparse(substitute(mod)), rm/12, rm2/12, 
+  cbind(name=deparse(substitute(mod)), rm, rm2, 
         list(looic = mod$loo$estimates["looic","Estimate"]))
 }
 
-RmChemo <- rmst(ChemoMod,t = c(36,120,240)) %>%
+RmChemo <- rmst(ChemoMod,t=c(3,10,20)) %>%
   rename(rm_med ="median", rm_lower ="lower", rm_upper ="upper") %>% 
   select(t, rm_med, rm_lower, rm_upper)
 
-RmChemo = round(RmChemo/12,2)
-
-RmAtezo <- rmst(AtezoMod, t=c(36,120,240)) %>%
+RmAtezo <- rmst(AtezoMod, t=c(3,10,20)) %>%
   rename(rm_med2="median", rm_lower2="lower", rm_upper2="upper") %>% 
   select(rm_med2, rm_lower2, rm_upper2)
 
-RmAtezo = round(RmAtezo/12,2)
 # irmst_sep <- rmst(AtezoMod, t=c(36,120), sample=TRUE) - rmst(ChemoMod, t=c(36,120), sample=TRUE) 
 # 
 # irmst_sep <- irmst_sep %>%
@@ -307,8 +442,8 @@ kable(TreatCompf,
 
 # ---- Survival Probabilities
 # Define time points for 1-year, 5-year, and 10-year survival probabilities
-comparison_times <- c(12, 60, 120)  # Use comparison_times instead of times
-
+# comparison_times <- c(12, 60, 120)  # Use comparison_times instead of times
+comparison_times = c(1,5,10)
 # Filter for these time points and include CIs
 SurvPh_1_5_10 <- SurvPh %>%
   filter(t %in% comparison_times) %>%
@@ -389,20 +524,25 @@ colnames(ExternalDf) = c("start","stop","r","n","treat")
 ExternalDf$treat = factor(ExternalDf$treat)
 ExternalDf$n = round(as.integer(ExternalDf$n)/10000)
 ExternalDf$r = round(as.integer(ExternalDf$r)/10000)
-ExternalDf$start = ExternalDf$start*12
-ExternalDf$stop = ExternalDf$stop*12
+# ExternalDf$start = ExternalDf$start*12
+# ExternalDf$stop = ExternalDf$stop*12
+
 
 ExternalDf <- ExternalDf %>%
   mutate(
-    haz = -log(r / n),  # Hazard estimate
-    haz_lower = -log(qbeta(0.975, r, n - r)),  # Lower bound of hazard
-    haz_upper = -log(qbeta(0.025, r, n - r))   # Upper bound of hazard
+    haz = -log(r / n)/5,  # Hazard estimate
+    haz_lower = -log(qbeta(0.975, r, n - r))/5,  # Lower bound of hazard
+    haz_upper = -log(qbeta(0.025, r, n - r))/5   # Upper bound of hazard
   )
-?cetux_seer
+
 # View the updated ExternalDf with hazard and CIs
 ExternalDf
-mspline_registry = mspline_spec(Surv(Time, Event) ~ 1, data=AtezoDf, df=7,  add_knots=c(120, 180, 240))
-
+mspline_registry = mspline_spec(Surv(Time, Event) ~ 1, data=AtezoDf, df=10,  add_knots=c(8,13, 25))
+# mspline = list(add_knots=c(4, 10, 25))
+# cetux_months = cetux_seer
+# cetux_months$start = cetux_months$start*12
+# cetux_months$stop  = cetux_months$stop*12
+tail(AtezoDf)
 
 ChemoModRegistry = survextrap(Surv(Time, Event) ~ 1, 
                               data=ChemoArm, 
@@ -413,19 +553,32 @@ ChemoModRegistry = survextrap(Surv(Time, Event) ~ 1,
                               chains = 2)
 ChemoModRegistry
 
+# test external data
+ChemoModRegistry = survextrap(Surv(Time, Event) ~ 1, 
+                              data=ChemoArm, 
+                              external = cetux_seer,
+                              mspline=mspline_registry,
+                              prior_hscale=prior_hscale, 
+                              prior_hsd = prior_hsd,
+                              chains = 2)
+# 
+
 plot(ChemoModRegistry)
+
+times = 25
 
 # Extract survival data for Kaplan-Meier curve
 km_data <- ChemoMod$km
 # Extract survival data from both models
-SurvChemo <- survival(ChemoMod, tmax = times) %>%
+SurvChemo <- survival(ChemoMod) %>%
   mutate(Model = "Without external data")
 SurvChemoRegistry <- survival(ChemoModRegistry, tmax = times) %>%
   mutate(Model = "With external data")
 
 # Extract hazard data from both models
-HazChemo <- hazard(ChemoMod, tmax = times) %>%
+HazChemo <- hazard(ChemoMod) %>%
   mutate(Model = "Without external data")
+tail(HazChemo)
 HazChemoRegistry <- hazard(ChemoModRegistry, tmax = times) %>%
   mutate(Model = "With external data")
 
@@ -442,8 +595,14 @@ ggplot(SurvData, aes(x = t, y = median, col = Model, fill = Model)) +
        x = "Time (Years)", 
        y = "Survival Probability") +
   theme_minimal() + 
-  theme(legend.position = "top") +
-  scale_x_continuous(labels = function(x) round(x / 12, 0)) +  # Convert months to years
+  theme(legend.position = c(0.6, 0.8), 
+        legend.box = "vertical",  
+        legend.title = element_text(size=14, face="bold"),
+        legend.text = element_text(size = 12),
+        axis.title = element_text(size=14),  # Increase the axis title text size
+        axis.text = element_text(size=12),  # Increase the axis text size
+        plot.title = element_text(size=16, face="bold")) +
+  scale_x_continuous(labels = function(x) round(x, 0)) +  # Convert months to years
   scale_color_viridis(discrete = TRUE) + 
   scale_fill_viridis(discrete = TRUE) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
@@ -456,16 +615,22 @@ ggplot(HazData, aes(x = t, y = median, col = Model, fill = Model)) +
        x = "Time (Years)", 
        y = "Hazard Rate") +
   theme_minimal() + 
-  theme(legend.position = "top") +
-  scale_x_continuous(labels = function(x) round(x / 12, 0)) +  # Convert months to years
+  theme(legend.position = c(0.6, 0.8), 
+        legend.box = "vertical",  
+        legend.title = element_text(size=14, face="bold"),
+        legend.text = element_text(size = 12),
+        axis.title = element_text(size=14),  # Increase the axis title text size
+        axis.text = element_text(size=12),  # Increase the axis text size
+        plot.title = element_text(size=16, face="bold")) +
   scale_color_viridis(discrete = TRUE) + 
   scale_fill_viridis(discrete = TRUE) + 
+  geom_vline(xintercept = max(ChemoArm$Time)) +  # KM cutoff for ChemoMod
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
 
 ggplot(HazData, aes(x = t, y = median, col = Model, fill = Model)) + 
   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, colour = NA) +
-  geom_line() +
-    geom_step(data = ExternalDf, aes(x = start, y = haz), col = "gray30", inherit.aes = FALSE) +
+  geom_line(size = 1.2) +
+  geom_step(data = ExternalDf, aes(x = start, y = haz), col = "gray30", inherit.aes = FALSE) +
   geom_step(data = ExternalDf, aes(x = start, y = haz_lower), col = "gray70", linetype = 2, inherit.aes = FALSE) +
   geom_step(data = ExternalDf, aes(x = start, y = haz_upper), col = "gray70", linetype = 2, inherit.aes = FALSE) +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
@@ -477,3 +642,23 @@ ggplot(HazData, aes(x = t, y = median, col = Model, fill = Model)) +
   theme(legend.position = c(0.4, 0.9), legend.background = element_blank()) +
   labs(col = NULL, fill = NULL)
 
+# test with cetux_seer
+
+ggplot(HazData, aes(x = t, y = median, col = Model, fill = Model)) + 
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, colour = NA) +
+  geom_line(size = 1.2) +
+  geom_step(data = cetux_seer, aes(x = start, y = haz), col = "gray30", inherit.aes = FALSE) +
+  geom_step(data = cetux_seer, aes(x = start, y = haz_lower), col = "gray70", linetype = 2, inherit.aes = FALSE) +
+  geom_step(data = cetux_seer, aes(x = start, y = haz_upper), col = "gray70", linetype = 2, inherit.aes = FALSE) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  xlab("Years after diagnosis") + 
+  ylab("Hazard") +
+  scale_color_viridis(discrete = TRUE) + 
+  scale_fill_viridis(discrete = TRUE) + 
+  geom_vline(xintercept = max(ChemoArm$Time)) +  # KM cutoff for ChemoMod
+  theme(legend.position = c(0.4, 0.9), legend.background = element_blank()) +
+  labs(col = NULL, fill = NULL)
+
+cetux_seer
+
+#################################
